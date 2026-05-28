@@ -106,7 +106,7 @@ class TutorAgent(BaseAgent):
                 )
                 return
 
-        response = self._generate_teaching_response(
+        response = await self._generate_teaching_response(
             knowledge_id, level, mastery, is_correct, event.data.get("question", "")
         )
 
@@ -122,7 +122,7 @@ class TutorAgent(BaseAgent):
             },
         )
 
-    def _generate_teaching_response(
+    async def _generate_teaching_response(
         self,
         knowledge_id: str,
         level: str,
@@ -130,12 +130,32 @@ class TutorAgent(BaseAgent):
         is_correct: bool | None,
         question: str,
     ) -> str:
-        """
-        生成教学回复。
+        system_prompt = SOCRATIC_PROMPTS.get(level, SOCRATIC_PROMPTS["beginner"])
 
-        实际生产环境中，这里会调用LLM（如GPT-4/MiniMax）。
-        当前用模板演示苏格拉底式教学的逻辑框架。
-        """
+        user_prompt = f"学生当前学习: {knowledge_id}\n掌握度: {mastery:.0%}\n"
+        if is_correct is True:
+            user_prompt += "学生刚答对了。请引导他深入思考或挑战更难的角度。"
+        elif is_correct is False:
+            user_prompt += "学生刚答错了。请用苏格拉底式提问引导他自己发现错误和正确解法。"
+        else:
+            user_prompt += f"学生提问: {question}\n请引导他先说出自己的理解，再逐步纠正。"
+
+        if self.llm:
+            result = await self.llm.chat(system_prompt, user_prompt, temperature=0.4)
+            if result:
+                return result
+
+        return self._fallback_teaching_response(knowledge_id, level, mastery, is_correct, question)
+
+    def _fallback_teaching_response(
+        self,
+        knowledge_id: str,
+        level: str,
+        mastery: float,
+        is_correct: bool | None,
+        question: str,
+    ) -> str:
+        """LLM 不可用时的模板回复。"""
         if is_correct is True:
             return (
                 f"很好！你在「{knowledge_id}」上的表现不错。"
@@ -168,7 +188,7 @@ class TutorAgent(BaseAgent):
         model = self.get_learner_model(learner_id)
         state = model.get_state(knowledge_id)
 
-        response = self._generate_teaching_response(
+        response = await self._generate_teaching_response(
             knowledge_id, state.level.value, state.mastery, None, message
         )
 

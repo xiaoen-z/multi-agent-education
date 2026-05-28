@@ -179,6 +179,10 @@ class EngagementAgent(BaseAgent):
 
     async def _intervene_frustration(self, learner_id: str, eng: LearnerEngagement) -> None:
         """挫败干预：鼓励 + 通知降低难度。"""
+        message = await self._llm_message(
+            "学生连续答错多题，感到挫败。请用温暖鼓励的语气发一条简短消息（1-2句），"
+            "帮助学生重建信心。不要用模板化的套话。"
+        )
         await self.emit(
             EventType.ENGAGEMENT_ALERT,
             learner_id,
@@ -186,7 +190,7 @@ class EngagementAgent(BaseAgent):
                 "alert_type": "frustration",
                 "consecutive_errors": eng.consecutive_errors,
                 "recent_accuracy": eng.recent_accuracy,
-                "message": "别灰心！犯错是学习的一部分。每个人都会遇到困难的知识点，让我们换一个方式来学习。",
+                "message": message,
             },
         )
         await self.emit(
@@ -197,6 +201,10 @@ class EngagementAgent(BaseAgent):
 
     async def _intervene_boredom(self, learner_id: str, eng: LearnerEngagement) -> None:
         """无聊干预：建议进阶 + 通知提高难度。"""
+        message = await self._llm_message(
+            "学生连续答对很多题，正确率很高，可能感到无聊。请用活泼的语气鼓励，"
+            "并自然建议挑战更难的内容（1-2句）。"
+        )
         await self.emit(
             EventType.ENGAGEMENT_ALERT,
             learner_id,
@@ -204,7 +212,7 @@ class EngagementAgent(BaseAgent):
                 "alert_type": "boredom",
                 "consecutive_correct": eng.consecutive_correct,
                 "recent_accuracy": eng.recent_accuracy,
-                "message": "你表现得非常棒！看起来这些题目对你来说很简单了，让我们挑战更难的内容！",
+                "message": message,
             },
         )
         await self.emit(
@@ -215,29 +223,58 @@ class EngagementAgent(BaseAgent):
 
     async def _intervene_fatigue(self, learner_id: str, eng: LearnerEngagement) -> None:
         """疲劳干预：建议休息。"""
+        minutes = eng.session_duration_minutes
+        message = await self._llm_message(
+            f"学生已经连续学习了{minutes:.0f}分钟。请用关心的语气建议休息10-15分钟，"
+            "简短自然（1-2句）。"
+        )
         await self.emit(
             EventType.ENCOURAGEMENT,
             learner_id,
             {
-                "message": (
-                    f"你已经学习了{eng.session_duration_minutes:.0f}分钟了，非常努力！"
-                    f"研究表明，适当休息能提高学习效率。建议休息10-15分钟再继续。"
-                ),
+                "message": message,
                 "type": "fatigue_break",
-                "session_minutes": eng.session_duration_minutes,
+                "session_minutes": minutes,
             },
         )
 
     async def _encourage(self, learner_id: str, eng: LearnerEngagement) -> None:
         """正向鼓励。"""
         if eng.encouragement_count % 3 == 0:
+            message = await self._llm_message(
+                f"学生连续{eng.consecutive_correct}题全对，表现很好。"
+                "请用真诚的语气给予一句简短鼓励。"
+            )
             await self.emit(
                 EventType.ENCOURAGEMENT,
                 learner_id,
                 {
-                    "message": f"连续{eng.consecutive_correct}题全对！你对这个知识点的理解越来越深了，继续保持！",
+                    "message": message,
                     "type": "positive_streak",
                     "streak": eng.consecutive_correct,
                 },
             )
         eng.encouragement_count += 1
+
+    async def _llm_message(self, instruction: str) -> str:
+        """生成干预消息，LLM 不可用时返回模板。"""
+        if self.llm:
+            result = await self.llm.chat(
+                "你是一位教育陪伴者，消息要简短、自然、有温度，不超过3句话。",
+                instruction,
+                temperature=0.7,
+            )
+            if result:
+                return result
+
+        return self._fallback_message(instruction)
+
+    def _fallback_message(self, instruction: str) -> str:
+        """LLM 不可用时的模板消息。"""
+        if "挫败" in instruction:
+            return "别灰心！犯错是学习的一部分。每个人都会遇到困难的知识点，让我们换一个方式来学习。"
+        if "无聊" in instruction:
+            return "你表现得非常棒！看起来这些题目对你来说很简单了，让我们挑战更难的内容！"
+        if "休息" in instruction:
+            return "你已经学习很久了，非常努力！适当休息能提高学习效率，建议休息10-15分钟再继续。"
+        return "继续保持，你的努力一定会有回报！"

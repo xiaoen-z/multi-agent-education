@@ -109,7 +109,7 @@ class HintAgent(BaseAgent):
         key = f"{learner_id}:{knowledge_id}"
         self._hint_history[key] = self._hint_history.get(key, 0) + 1
 
-        hint_text = self._generate_hint(knowledge_id, level)
+        hint_text = await self._generate_hint(knowledge_id, level)
 
         level_names = {
             HintLevel.METACOGNITIVE: "metacognitive",
@@ -139,18 +139,38 @@ class HintAgent(BaseAgent):
             },
         )
 
-    def _generate_hint(self, knowledge_id: str, level: int) -> str:
-        """
-        生成提示文本。
+    async def _generate_hint(self, knowledge_id: str, level: int) -> str:
+        level_names = {
+            HintLevel.METACOGNITIVE: "元认知暗示",
+            HintLevel.SCAFFOLDING: "脚手架引导",
+            HintLevel.TARGETED: "详细解答",
+        }
 
-        生产环境中会调用LLM根据具体题目生成，
-        这里用模板演示分级提示的逻辑。
-        """
-        templates = HINT_TEMPLATES[level]["templates"]
-        template = templates[0]
+        if self.llm:
+            prompt = (
+                f"你是数学老师，学生卡在「{knowledge_id}」这道题上。\n"
+                f"请提供{level_names[level]}级别的提示。\n"
+            )
+            if level == HintLevel.METACOGNITIVE:
+                prompt += "只给反思方向的暗示，让学生自己发现问题，不给具体步骤。"
+            elif level == HintLevel.SCAFFOLDING:
+                prompt += "给出关键步骤或公式作为引导，但不要给出最终答案。"
+            else:
+                prompt += "给出详细解题步骤，但鼓励学生看完后自己重做一遍。"
 
+            result = await self.llm.chat("", prompt, temperature=0.3)
+            if result:
+                return result
+
+        return self._fallback_hint(knowledge_id, level)
+
+    def _fallback_hint(self, knowledge_id: str, level: int) -> str:
+        """LLM 不可用时的模板提示。"""
         if level == HintLevel.METACOGNITIVE:
-            return f"💡 关于「{knowledge_id}」的提示：\n{template}"
+            return (
+                f"💡 关于「{knowledge_id}」的提示：\n"
+                f"想一想，这道题的题目里有哪些关键信息？你有没有全部用上？"
+            )
         elif level == HintLevel.SCAFFOLDING:
             return (
                 f"📝 关于「{knowledge_id}」的引导提示：\n"

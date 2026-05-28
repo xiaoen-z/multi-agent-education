@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     # LLM
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    openai_base_url: str = ""  # 留空用 OpenAI，DeepSeek 填 https://api.deepseek.com
     minimax_api_key: str = ""
     minimax_model: str = "MiniMax-M2.7"
 

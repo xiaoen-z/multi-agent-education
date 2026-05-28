@@ -36,10 +36,12 @@ class BaseAgent(ABC):
         name: str,
         event_bus: EventBus,
         learner_models: dict[str, LearnerModel],
+        llm_service: object | None = None,
     ) -> None:
         self.name = name
         self.event_bus = event_bus
         self.learner_models = learner_models
+        self.llm = llm_service
         self._register_handlers()
         logger.info("[%s] Agent initialized", self.name)
 

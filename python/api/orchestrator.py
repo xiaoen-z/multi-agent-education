@@ -9,6 +9,8 @@ Agent 编排器 -- 初始化所有Agent并连接到EventBus。
 
 from core.event_bus import EventBus, Event, EventType
 from core.learner_model import LearnerModel
+from core.llm_service import LLMService
+from config.settings import settings
 from agents import (
     AssessmentAgent,
     TutorAgent,
@@ -25,6 +27,12 @@ class AgentOrchestrator:
         self.event_bus = EventBus()
         self.learner_models: dict[str, LearnerModel] = {}
 
+        llm = LLMService(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            base_url=settings.openai_base_url or None,
+        )
+
         self.assessment = AssessmentAgent(
             name="AssessmentAgent",
             event_bus=self.event_bus,
@@ -34,6 +42,7 @@ class AgentOrchestrator:
             name="TutorAgent",
             event_bus=self.event_bus,
             learner_models=self.learner_models,
+            llm_service=llm,
         )
         self.curriculum = CurriculumAgent(
             name="CurriculumAgent",
@@ -44,11 +53,13 @@ class AgentOrchestrator:
             name="HintAgent",
             event_bus=self.event_bus,
             learner_models=self.learner_models,
+            llm_service=llm,
         )
         self.engagement = EngagementAgent(
             name="EngagementAgent",
             event_bus=self.event_bus,
             learner_models=self.learner_models,
+            llm_service=llm,
         )
 
     async def submit_answer(
